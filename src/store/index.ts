@@ -257,6 +257,19 @@ interface AppState {
   cursorCol:  number;
   setCursor:  (line: number, col: number) => void;
 
+  // ── Confirm dialog for dirty tab close ─────────────────────────────────────
+  confirmDialog: {
+    isOpen: boolean;
+    tabPath: string;
+    tabName: string;
+    pane: "left" | "right" | null;
+    tabIdx: number | null;
+  };
+  showConfirmDialog: (tabPath: string, tabName: string, pane: "left" | "right", tabIdx: number) => void;
+  hideConfirmDialog: () => void;
+  confirmSave: () => Promise<void>;
+  confirmDiscard: () => void;
+
 }
 
 function detectLanguage(path: string): string {
@@ -604,12 +617,19 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   closeTab: (idx, pane) => {
-    const { leftPane, rightPane } = get();
+    const { leftPane, rightPane, showConfirmDialog } = get();
     const sourcePane = pane === "left" ? leftPane : rightPane;
     if (!sourcePane) return;
 
     const tab = sourcePane.tabs[idx];
     if (tab) {
+      // Check if this is a normal file tab with unsaved changes
+      const isNormalFile = !tab.kind || tab.kind === "file";
+      if (isNormalFile && tab.dirty) {
+        showConfirmDialog(tab.path, tab.name, pane, idx);
+        return; // Don't close yet - wait for user decision
+      }
+
       // Only free content/timers if path won't remain open in any pane
       const remainLeft  = pane === "left" ? leftPane.tabs.filter((_, i) => i !== idx)  : leftPane.tabs;
       const remainRight = pane === "right" ? (rightPane?.tabs ?? []).filter((_, i) => i !== idx) : (rightPane?.tabs ?? []);
@@ -923,5 +943,44 @@ export const useStore = create<AppState>((set, get) => ({
     const cur  = filled.indexOf(activePresetIdx ?? -1);
     const next = filled[(cur + 1) % filled.length];
     loadPreset(next);
+  },
+
+  // ── Confirm dialog for dirty tab close ─────────────────────────────────────
+  confirmDialog: {
+    isOpen: false,
+    tabPath: "",
+    tabName: "",
+    pane: null,
+    tabIdx: null,
+  },
+  showConfirmDialog: (tabPath, tabName, pane, tabIdx) => {
+    set({
+      confirmDialog: { isOpen: true, tabPath, tabName, pane, tabIdx },
+    });
+  },
+  hideConfirmDialog: () => {
+    set({
+      confirmDialog: { isOpen: false, tabPath: "", tabName: "", pane: null, tabIdx: null },
+    });
+  },
+  confirmSave: async () => {
+    const { confirmDialog, saveTab, closeTab } = get();
+    if (!confirmDialog.tabPath || confirmDialog.pane === null || confirmDialog.tabIdx === null) return;
+
+    try {
+      await saveTab(confirmDialog.tabPath);
+      closeTab(confirmDialog.tabIdx, confirmDialog.pane);
+      get().hideConfirmDialog();
+    } catch (e) {
+      get().setStatus(`Save failed: ${e}`);
+      // Keep dialog open on error
+    }
+  },
+  confirmDiscard: () => {
+    const { confirmDialog, closeTab } = get();
+    if (confirmDialog.pane === null || confirmDialog.tabIdx === null) return;
+
+    closeTab(confirmDialog.tabIdx, confirmDialog.pane);
+    get().hideConfirmDialog();
   },
 }));

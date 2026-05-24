@@ -28,6 +28,7 @@ import { MdPreviewTab }        from "./components/MdPreviewTab";
 import { NotebookViewerTab }  from "./components/NotebookViewerTab";
 import { SettingsPanel }      from "./components/Settings";
 import { SpotifyPlayer }   from "./components/SpotifyPlayer";
+import { ConfirmDialog }   from "./components/ConfirmDialog";
 
 function TitleBtn({ onClick, title, active, children }: {
   onClick: () => void; title: string; active?: boolean; children: React.ReactNode;
@@ -82,6 +83,12 @@ export default function App() {
   const cyclePreset       = useStore((s) => s.cyclePreset);
   const openAiTab             = useStore((s) => s.openAiTab);
   const openPinnedTerminal    = useStore((s) => s.openPinnedTerminal);
+
+  // Confirm dialog state
+  const confirmDialog     = useStore((s) => s.confirmDialog);
+  const confirmSave       = useStore((s) => s.confirmSave);
+  const confirmDiscard    = useStore((s) => s.confirmDiscard);
+  const hideConfirmDialog = useStore((s) => s.hideConfirmDialog);
 
   const openAiLauncher    = useStore((s) => s.openAiLauncher);
   const openHtmlViewer    = useStore((s) => s.openHtmlViewer);
@@ -633,6 +640,13 @@ if (ctrl && e.shiftKey && (e.key === "C" || e.key === "c")) { e.preventDefault()
       {showHelp     && <HelpPanel onClose={toggleHelp} />}
       {showSettings && <SettingsPanel />}
       {showSpotify  && <SpotifyPlayer onClose={toggleSpotify} />}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        fileName={confirmDialog.tabName}
+        onSave={confirmSave}
+        onDiscard={confirmDiscard}
+        onCancel={hideConfirmDialog}
+      />
       </div>
     </div>
   );
