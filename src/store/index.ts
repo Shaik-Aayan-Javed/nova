@@ -976,11 +976,33 @@ export const useStore = create<AppState>((set, get) => ({
       // Keep dialog open on error
     }
   },
-  confirmDiscard: () => {
-    const { confirmDialog, closeTab } = get();
-    if (confirmDialog.pane === null || confirmDialog.tabIdx === null) return;
+  confirmDiscard: async () => {
+    const { confirmDialog, closeTab, leftPane, rightPane } = get();
+    if (!confirmDialog.tabPath || confirmDialog.pane === null || confirmDialog.tabIdx === null) return;
 
-    closeTab(confirmDialog.tabIdx, confirmDialog.pane);
-    get().hideConfirmDialog();
+    try {
+      // Revert content to what's on disk
+      const originalContent = await invoke<string>("read_file", { path: confirmDialog.tabPath });
+      tabContentMap.set(confirmDialog.tabPath, originalContent);
+
+      // Clear dirty flag in all panes
+      set((s) => ({
+        leftPane: {
+          ...s.leftPane,
+          tabs: s.leftPane.tabs.map((t) => t.path === confirmDialog.tabPath ? { ...t, dirty: false } : t),
+        },
+        rightPane: s.rightPane ? {
+          ...s.rightPane,
+          tabs: s.rightPane.tabs.map((t) => t.path === confirmDialog.tabPath ? { ...t, dirty: false } : t),
+        } : null,
+      }));
+
+      // Now close the tab
+      closeTab(confirmDialog.tabIdx, confirmDialog.pane);
+      get().hideConfirmDialog();
+    } catch (e) {
+      get().setStatus(`Failed to discard changes: ${e}`);
+      // Keep dialog open on error
+    }
   },
 }));
